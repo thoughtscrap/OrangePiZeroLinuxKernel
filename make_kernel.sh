@@ -14,10 +14,12 @@ _MKDIR_P="/bin/mkdir -p"
 
 _READ="read -p"
 
+## Populate the SCRIPT_DIR variable with the Directory path of the current script
+
 ########################################
 ## Constants
 ########################################
-REQ_PKGS="bison flex build-essential libssl-dev device-tree-compiler python python-dev swig"
+REQ_PKGS="bison flex build-essential libssl-dev device-tree-compiler python python-dev swig device-tree-compiler"
 TOOLCHAIN_URL="https://releases.linaro.org/components/toolchain/binaries/7.3-2018.05/arm-linux-gnueabihf"
 TOOLCHAIN_DIR=toolchain
 
@@ -25,6 +27,21 @@ TOOLCHAIN_DIR=toolchain
 ########################################
 ## Functions
 ########################################
+
+## https://www.ostricher.com/2014/10/the-right-way-to-get-the-directory-of-a-bash-script/
+## https://stackoverflow.com/questions/59895/getting-the-source-directory-of-a-bash-script-from-within
+get_script_dir() {
+    local SOURCE="${BASH_SOURCE[0]}"
+    while [ -h "${SOURCE}" ]
+    do
+        local DIR="$( cd -P "$( dirname "${SOURCE}" )" && pwd )"
+        SOURCE="$( readlink "${SOURCE}" )"
+        [[ ${SOURCE} != /* ]] && SOURCE="$DIR/${SOURCE}"
+    done
+    DIR="$( cd -P "$( dirname "${SOURCE}" )" && pwd )"
+    ${_ECHO} ${DIR}
+}
+
 check_pkg_installed(){
     local pkg_name=${1}
     local status=$(${_DPKG} -W -f'${Status}' ${pkg_name} 2>/dev/null | ${_GREP} -c "ok installed")
@@ -147,8 +164,12 @@ done
 ## Entry Point
 ########################################
 
+SCRIPT_DIR=$(get_script_dir)
+
+## Display Information about the script and ask for proceeding
 display_information
 
+## Create base directory where all the processing would be contained and done
 create_base_dir
 
 ## Ensure all the required packages are installed ##
@@ -156,8 +177,7 @@ install_dependencies
 
 ## Install the toolchain for cross compilation
 install_toolchain ${BASE_DIR}/${TOOLCHAIN_DIR}
-export CROSS_COMPILE_FLAG=${TOOLCHAIN_DIR}/bin/arm-linux-gnueabihf-
-
+export CROSS_COMPILE_FLAG=${BASE_DIR}/${TOOLCHAIN_DIR}/bin/arm-linux-gnueabihf-
 
 ## Clone the kernel source repository and xradio driver source repository
 cd ${BASE_DIR}
@@ -169,7 +189,26 @@ ${_ECHO} "Downloading xradio source..."
 git clone --depth 1 https://github.com/fifteenhex/xradio
 
 ${_ECHO} "Create .config file for kernel"
-cp ../.config linux-sunxi/
+cp ${SCRIPT_DIR}/.config ${BASE_DIR}/linux-sunxi/.config
 
 ${_ECHO} "Compiling kernel (This may take a long time)..."
+cd ${BASE_DIR}/linux-sunxi
+
+make -j4 ARCH=arm oldconfig
+
+make -j4 ARCH=arm CROSS_COMPILE=${CROSS_COMPIE_FLAG} LOADADDR=0x48000000 zImage modules dtbs
+rm -rf ${BASE_DIR}/output
+
+make -j4 ARCH=arm CROSS_COMPILE=${CROSS_COMPIE_FLAG} INSTALL_MOD_PATH=${BASE_DIR}/output modules_install
+cp arch/arm/boot/zImage ${BASE_DIR}/output/zImage
+
+${_ECHO} "Compiling XRadio WiFi Driver..."
+cd ${BASE_DIR}/xradio
+
+make -j4 ARCH=arm CROSS_COMPILE=${CROSS_COMPIE_FLAG} -C ${BASE_DIR}/linux-sunxi M=${BASE_DIR}/xradio INSTALL_MOD_PATH=${BASE_DIR}/output modules
+make -j4 ARCH=arm CROSS_COMPILE=${CROSS_COMPIE_FLAG} -C ${BASE_DIR}/linux-sunxi M=${BASE_DIR}/xradio INSTALL_MOD_PATH=${BASE_DIR}/output modules_install
+
+${_ECHO} "Compiling device tree"
+dtc -I dts -O dtb ${SCRIPT_DIR}/orangepi-zero.dts > ${BASE_DIR}/output/orangepi-zero.dtb
+
 
