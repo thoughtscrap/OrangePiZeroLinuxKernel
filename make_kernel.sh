@@ -8,8 +8,8 @@ _DPKG=/usr/bin/dpkg-query
 _LSCPU=/usr/bin/lscpu
 
 REQ_PKGS="bison flex build-essential libssl-dev device-tree-compiler python python-dev swig"
-
 TOOLCHAIN_URL="https://releases.linaro.org/components/toolchain/binaries/7.3-2018.05/arm-linux-gnueabihf"
+WORK_DIR_REL=workdir
 
 ########################################
 ## Functions
@@ -50,8 +50,6 @@ get_architecture(){
 }
 
 install_toolchain(){
-    cd ${WORK_DIR}
-
     ## Check the machine architecture
     get_architecture
     local arch=$?
@@ -63,12 +61,14 @@ install_toolchain(){
 	wget ${TOOLCHAIN_URL}/gcc-linaro-7.3.1-2018.05-i686_arm-linux-gnueabihf.tar.xz -O toolchain.tar.xz
         tar -xf toolchain.tar.xz
     elif [ ${arch} -eq 64 ]
+    then
 	## 64 bit machine ##
 	${_ECHO} "Installing 64 bit toolchain..."
 	wget ${TOOLCHAIN_URL}/gcc-linaro-7.3.1-2018.05-x86_64_arm-linux-gnueabihf.tar.xz -O toolchain.tar.xz
         tar -xf toolchain.tar.xz
     else
 	## Unknown architecture ##
+	${_ECHO} "Unknown Archtecture..."
     fi
 }
 
@@ -77,9 +77,9 @@ install_toolchain(){
 ## Entry Point
 ########################################
 
-echo "Creating a new Working Directory \"orangepi\""
-mkdir orangepi
-cd orangepi
+echo "Creating a new Working Directory \"${WORK_DIR_REL}\""
+mkdir ${WORK_DIR_REL}
+cd ${WORK_DIR_REL}
 
 
 ## Ensure all the required packages are installed ##
@@ -104,6 +104,6 @@ ${_ECHO} "Downloading xradio source..."
 git clone --depth 1 https://github.com/fifteenhex/xradio
 
 ${_ECHO} "Create .config file for kernel"
-cp .config linux-sunxi/
+cp ../.config linux-sunxi/
 
 ${_ECHO} "Compiling kernel..."
